@@ -1,0 +1,214 @@
+{
+    "scopeName": "source.pangy",
+    "patterns": [
+        { "include": "#comments" },
+        { "include": "#keywords" },
+        { "include": "#strings" },
+        { "include": "#numbers" },
+        { "include": "#classes" },
+        { "include": "#functions" },
+        { "include": "#variables" },
+        { "include": "#operators" },
+        { "include": "#builtins" },
+        { "include": "#macros" },
+        { "include": "#includes" },
+        { "include": "#member_access" }
+    ],
+    "repository": {
+        "comments": {
+            "patterns": [
+                {
+                    "name": "comment.line.double-slash.pangy",
+                    "match": "//.*"
+                },
+                {
+                    "name": "comment.line.number-sign.pangy",
+                    "match": "#.*"
+                }
+            ]
+        },
+        "keywords": {
+            "patterns": [
+                {
+                    "name": "keyword.control.pangy",
+                    "match": "\\b(if|else if|else|loop|stop|return|include|class|def|static|var|public|private|macro|this|new)\\b"
+                },
+                {
+                    "name": "storage.type.pangy",
+                    "match": "\\b(int|string|void|float|file)\\b(?!\\[)"
+                },
+                {
+                    "name": "storage.type.array.pangy",
+                    "match": "\\b(int|string|float)\\[\\](\\[\\])*"
+                },
+                {
+                    "name": "keyword.operator.arrow.pangy",
+                    "match": "->"
+                }
+            ]
+        },
+        "strings": {
+            "name": "string.quoted.double.pangy",
+            "begin": "\"",
+            "end": "\"",
+            "patterns": [
+                {
+                    "name": "constant.character.escape.pangy",
+                    "match": "\\\\."
+                }
+            ]
+        },
+        "numbers": {
+            "patterns": [
+                {
+                    "name": "constant.numeric.float.pangy",
+                    "match": "\\b\\d+\\.\\d+\\b"
+                },
+                {
+                    "name": "constant.numeric.integer.pangy",
+                    "match": "\\b\\d+\\b"
+                }
+            ]
+        },
+        "classes": {
+            "patterns": [
+                {
+                    "name": "entity.name.type.class.definition.pangy",
+                    "match": "(?<=class\\s+)\\w+"
+                },
+                {
+                    "name": "entity.name.type.class.reference.pangy",
+                    "match": "\\b[A-Z][A-Za-z0-9_]*(?=\\s+\\w+\\s*=)"
+                },
+                {
+                    "name": "variable.other.class.declaration.pangy",
+                    "match": "\\b[a-z][A-Za-z0-9_]*(?=\\s+[A-Z][A-Za-z0-9_]*\\s*=)"
+                },
+                {
+                    "name": "entity.name.type.instance.pangy",
+                    "match": "\\b[A-Z][A-Za-z0-9_]*(?=\\.new\\()"
+                },
+                {
+                    "name": "entity.name.type.class.reference.pangy",
+                    "match": "\\b[A-Z][A-Za-z0-9_]*\\b(?!\\s*\\()"
+                }
+            ]
+        },
+        "functions": {
+            "patterns": [
+                {
+                    "name": "meta.function.pangy",
+                    "begin": "\\b(def)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(\\()",
+                    "beginCaptures": {
+                        "1": { "name": "keyword.control.pangy" },
+                        "2": { "name": "entity.name.function.definition.pangy" },
+                        "3": { "name": "punctuation.definition.parameters.begin.pangy" }
+                    },
+                    "end": "(\\))\\s*(->)?\\s*([A-Za-z_][A-Za-z0-9_]*(?:\\[\\])?)?\\s*(\\{)?",
+                    "endCaptures": {
+                        "1": { "name": "punctuation.definition.parameters.end.pangy" },
+                        "2": { "name": "keyword.operator.arrow.pangy" },
+                        "3": { "name": "storage.type.pangy" },
+                        "5": { "name": "punctuation.section.function.begin.pangy" }
+                    },
+                    "patterns": [
+                        { "include": "#keywords" },
+                        {
+                            "name": "meta.parameter.pangy",
+                            "match": "\\b(int|string|void|float|file)(?:\\s*\\[\\])*\\s+([A-Za-z_][A-Za-z0-9_]*)\\b",
+                            "captures": {
+                                "1": { "name": "storage.type.pangy" },
+                                "2": { "name": "variable.parameter.pangy" }
+                            }
+                        },
+                        {
+                            "match": ",",
+                            "name": "punctuation.separator.comma.pangy"
+                        },
+                        { "include": "#comments" }
+                    ]
+                },
+                {
+                    "name": "entity.name.function.macro.definition.pangy",
+                    "match": "(?<=macro\\s+)\\w+"
+                },
+                {
+                    "name": "entity.name.function.call.pangy",
+                    "match": "\\b\\w+(?=\\()"
+                },
+                {
+                    "name": "entity.name.function.method.call.pangy",
+                    "match": "(?<=:)\\w+(?=\\()"
+                }
+            ]
+        },
+        "variables": {
+            "patterns": [
+                {
+                    "name": "variable.other.declaration.pangy",
+                    "match": "(?<=var\\s+)\\w+(?=\\s+)"
+                },
+                {
+                    "name": "variable.object.property.pangy",
+                    "match": "(?<=::)\\w+"
+                },
+                {
+                    "name": "variable.other.reference.pangy",
+                    "match": "\\b[a-z][A-Za-z0-9_]*\\b(?!\\s*\\(|\\s+int|\\s+string|\\s+float|\\s+file|\\s+void)"
+                }
+            ]
+        },
+        "operators": {
+            "patterns": [
+                {
+                    "name": "keyword.operator.pangy",
+                    "match": "\\+\\+|--"
+                },
+                {
+                    "name": "keyword.operator.pangy",
+                    "match": "\\+|\\-|\\*|/|%|=|==|!=|>|<|>=|<=|\\.|::|\\["
+                }
+            ]
+        },
+        "builtins": {
+            "patterns": [
+                {
+                    "name": "support.function.builtin.pangy",
+                    "match": "\\b(print|input|to_int|to_string|to_stringf|to_intf|append|pop|length|index|open|write|read|close)\\b"
+                }
+            ]
+        },
+        "macros": {
+            "patterns": [
+                {
+                    "name": "entity.name.function.macro.call.pangy",
+                    "match": "@\\w+"
+                }
+            ]
+        },
+        "includes": {
+            "patterns": [
+                {
+                    "name": "keyword.control.import.pangy",
+                    "match": "\\b(include)\\s+\\w+(\\.\\w+)*"
+                }
+            ]
+        },
+        "member_access": {
+            "patterns": [
+                {
+                    "name": "variable.object.member.pangy",
+                    "match": "(?<=this:)\\w+"
+                },
+                {
+                    "name": "variable.object.member.pangy",
+                    "match": "\\b[a-z][A-Za-z0-9_]*(?=\\.\\w+)"
+                },
+                {
+                    "name": "variable.object.property.pangy",
+                    "match": "(?<=\\.)\\w+(?!\\()"
+                }
+            ]
+        }
+    }
+} 

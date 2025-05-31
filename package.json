@@ -1,0 +1,68 @@
+{
+  "name": "pangy-language-support",
+  "displayName": "Pangy Language Support",
+  "description": "Language support for Pangy programming language",
+  "version": "0.0.1",
+  "publisher": "Icarogamer2441",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Icarogamer2441/VSCodePangySupport.git"
+  },
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "activationEvents": [
+    "onLanguage:pangy"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [{
+      "id": "pangy",
+      "aliases": ["Pangy", "pgy"],
+      "extensions": [".pgy"],
+      "configuration": "./language-configuration.json",
+      "icon": {
+        "light": "./icons/icon-light.svg",
+        "dark": "./icons/icon-dark.svg"
+      }
+    }],
+    "grammars": [{
+      "language": "pangy",
+      "scopeName": "source.pangy",
+      "path": "./syntaxes/pangy.tmLanguage.json"
+    }],
+    "commands": [{
+      "command": "pangy.runFile",
+      "title": "Run Pangy File",
+      "icon": "$(play)"
+    }],
+    "menus": {
+      "editor/context": [{
+        "when": "resourceLangId == pangy",
+        "command": "pangy.runFile",
+        "group": "navigation"
+      }],
+      "editor/title": [{
+        "when": "resourceLangId == pangy",
+        "command": "pangy.runFile",
+        "group": "navigation@1"
+      }]
+    }
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "pretest": "npm run lint",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.90.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "eslint": "^9.25.1",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
