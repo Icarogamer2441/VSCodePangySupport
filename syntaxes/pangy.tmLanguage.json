@@ -12,7 +12,8 @@
         { "include": "#builtins" },
         { "include": "#macros" },
         { "include": "#includes" },
-        { "include": "#member_access" }
+        { "include": "#member_access" },
+        { "include": "#constants" }
     ],
     "repository": {
         "comments": {
@@ -24,6 +25,11 @@
                 {
                     "name": "comment.line.number-sign.pangy",
                     "match": "#.*"
+                },
+                {
+                    "name": "comment.block.pangy",
+                    "begin": "/\\*",
+                    "end": "\\*/"
                 }
             ]
         },
@@ -35,7 +41,7 @@
                 },
                 {
                     "name": "storage.type.pangy",
-                    "match": "\\b(int|string|void|float|file)\\b(?!\\[)"
+                    "match": "\\b(int|string|void|float|file|bool)\\b(?!\\[)"
                 },
                 {
                     "name": "storage.type.array.pangy",
@@ -207,6 +213,14 @@
                 {
                     "name": "variable.object.property.pangy",
                     "match": "(?<=\\.)\\w+(?!\\()"
+                }
+            ]
+        },
+        "constants": {
+            "patterns": [
+                {
+                    "name": "constant.language.boolean.pangy",
+                    "match": "\\b(true|false)\\b"
                 }
             ]
         }
