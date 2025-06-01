@@ -1733,7 +1733,7 @@ function updateDiagnostics(document, collection) {
 				if (!variableExists && !isParameter && !isMethodCall && 
 				    // Ignore built-in functions
 				    !['print', 'input', 'to_int', 'to_string', 'to_stringf', 'to_intf', 
-				     'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'exec'].includes(word)) { // Added 'exec'
+				     'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'exec', 'show'].includes(word)) { // Added 'exec'
 					
 					// Position detection for the variable in the uncommented line
 					const wordIndexInUncommented = processedLine.indexOf(word);
