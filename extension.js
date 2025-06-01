@@ -87,7 +87,7 @@ function activate(context) {
 				// Built-in functions
 				const builtins = [
 					'print', 'input', 'to_int', 'to_string', 'to_stringf', 'to_intf',
-					'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'exec',
+					'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'insert', 'exec',
 					'show'
 				];
 				
@@ -136,6 +136,9 @@ function activate(context) {
 							break;
 						case 'close':
 							item.documentation = 'Closes a file';
+							break;
+						case 'insert':
+							item.documentation = 'Inserts content into a string at a specified index.';
 							break;
 						case 'exec':
 							item.documentation = 'Executes a shell command. Mode 0 for async, 1 for sync.';
@@ -579,13 +582,17 @@ function activate(context) {
 						signature: 'read(file: file, bytes: int) -> string', 
 						description: 'Reads data from a file' 
 					},
-					'close': { 
-						signature: 'close(file: file) -> void', 
-						description: 'Closes a file' 
+					'close': {
+						signature: 'close(file: file) -> void',
+						description: 'Closes a file'
+					},
+					'insert': {
+						signature: 'insert(original: any, index: int, content: any) -> void',
+						description: 'Inserts content into a list at a specified index.'
 					},
 					'exec': {
 						signature: 'exec(cmd: string, mode: int) -> string',
-						description: 'Executes a shell command. Mode 0 for async, 1 for sync. Returns command output if sync.'
+						description: 'Executes a shell command. Mode 0 for async, 1 for sync, 2 for exit code only. Returns command output if sync.'
 					},
 					'show': {
 						signature: 'show(args: any) -> void',
@@ -633,11 +640,12 @@ function activate(context) {
 				'write': 'Writes data to a file',
 				'read': 'Reads data from a file',
 				'close': 'Closes a file',
+			'insert': 'Built-in function to insert content into a string',
 				'new': 'Creates a new instance of a class',
 				'exec': 'Built-in function to execute a shell command',
-                'bool': 'Boolean data type (true/false)',
-                'true': 'Boolean literal for true',
-                'false': 'Boolean literal for false',
+				            'bool': 'Boolean data type (true/false)',
+				            'true': 'Boolean literal for true',
+				            'false': 'Boolean literal for false',
 				'show': 'Built-in function to print things without new line at the end'
 			};
 			
@@ -1834,7 +1842,7 @@ function updateDiagnostics(document, collection) {
 			const functionExists = symbolTable.functions.some(f => f.name === functionName) || 
 								  symbolTable.importedSymbols.functions.some(f => f.name === functionName && !f.className) || // Ensure it's not a method unless context is a method call
 								  ['print', 'input', 'to_int', 'to_string', 'to_stringf', 'to_intf', 
-								   'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'exec'].includes(functionName); 
+								   'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'insert', 'exec', 'show'].includes(functionName);
 			
 			if (!functionExists) {
 				// Position detection in the uncommented line
