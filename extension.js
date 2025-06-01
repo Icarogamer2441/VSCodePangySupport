@@ -88,7 +88,7 @@ function activate(context) {
 				const builtins = [
 					'print', 'input', 'to_int', 'to_string', 'to_stringf', 'to_intf',
 					'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'insert', 'exec',
-					'show'
+					'show', 'exit'
 				];
 				
 				builtins.forEach(func => {
@@ -145,6 +145,9 @@ function activate(context) {
 							break;
 						case 'show':
 							item.documentation = 'Print to the output but without a new line at the end'
+							break;
+						case 'exit':
+							item.documentation = 'Terminates the program with the given exit code.';
 							break;
 					}
 					items.push(item);
@@ -597,6 +600,10 @@ function activate(context) {
 					'show': {
 						signature: 'show(args: any) -> void',
 						description: 'Print to the output without the new line at the end'
+					},
+					'exit': {
+						signature: 'exit(code: int) -> void',
+						description: 'Terminates the program with the given exit code.'
 					}
 				};
 				
@@ -646,8 +653,9 @@ function activate(context) {
 				            'bool': 'Boolean data type (true/false)',
 				            'true': 'Boolean literal for true',
 				            'false': 'Boolean literal for false',
-				'show': 'Built-in function to print things without new line at the end'
-			};
+				'show': 'Built-in function to print things without new line at the end',
+				'exit': 'Built-in function to terminate the program'
+				};
 			
 			// Check for array types
 			if (word === 'int[]' || word === 'string[]' || word === 'float[]') {
@@ -1740,10 +1748,10 @@ function updateDiagnostics(document, collection) {
 				
 				if (!variableExists && !isParameter && !isMethodCall && 
 				    // Ignore built-in functions
-				    !['print', 'input', 'to_int', 'to_string', 'to_stringf', 'to_intf', 
-				     'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'exec', 'show'].includes(word)) { // Added 'exec'
-					
-					// Position detection for the variable in the uncommented line
+				    !['print', 'input', 'to_int', 'to_string', 'to_stringf', 'to_intf',
+				     'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'insert', 'exec', 'show', 'exit'].includes(word)) {
+				 
+				 // Position detection for the variable in the uncommented line
 					const wordIndexInUncommented = processedLine.indexOf(word);
 					if (wordIndexInUncommented !== -1) {
 						// Calculate the true index in the original line
@@ -1842,7 +1850,7 @@ function updateDiagnostics(document, collection) {
 			const functionExists = symbolTable.functions.some(f => f.name === functionName) || 
 								  symbolTable.importedSymbols.functions.some(f => f.name === functionName && !f.className) || // Ensure it's not a method unless context is a method call
 								  ['print', 'input', 'to_int', 'to_string', 'to_stringf', 'to_intf', 
-								   'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'insert', 'exec', 'show'].includes(functionName);
+								   'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'insert', 'exec', 'show', 'exit'].includes(functionName);
 			
 			if (!functionExists) {
 				// Position detection in the uncommented line
