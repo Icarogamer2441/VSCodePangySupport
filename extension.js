@@ -8,7 +8,7 @@ const os = require('os');
 const DEFAULT_TYPES = ['int', 'string', 'float', 'file', 'void', 'int[]', 'string[]', 'float[]', 'bool'];
 
 // Regexes (global for helper)
-const classRegexGlobal = /class\s+([A-Za-z_][A-Za-z0-9_]*)/; // Renamed to avoid conflict
+const classRegexGlobal = /class\s+([A-Za-z_][A-Za-z0-9_]*)/; // ENSURED CORRECT (no public/private)
 const funcRegexGlobal = /def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*->\s*([A-Za-z_][A-Za-z0-9_]*(\[\])?)/;
 const macroRegexGlobal = /macro\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/;
 const includeRegexGlobal = /include\s+([A-Za-z_][A-Za-z0-9_.]*(@[A-Za-z_][A-Za-z0-9_]*)?)/;
@@ -638,9 +638,39 @@ function activate(context) {
 				return new vscode.Hover(`Array of ${baseType} values`);
 			}
 			
-			// Check for macro calls
-			if (line.includes('@' + word)) {
-				return new vscode.Hover(`Call to macro '${word}'`);
+			// Check for macro calls - enhanced to better detect @ syntax
+			const macroCallMatch = line.match(/@([A-Za-z_][A-Za-z0-9_]*)/);
+			if (macroCallMatch && (word === macroCallMatch[1] || `@${word}` === macroCallMatch[0])) {
+				// Get the macro name whether user hovers over @ or the name
+				const macroName = macroCallMatch[1];
+				
+				// Get the macro info from the symbol table
+				const macroInfo = symbolTable.macros.find(m => m.name === macroName) || 
+                               symbolTable.importedSymbols.macros.find(m => m.name === macroName);
+                
+                if (macroInfo) {
+                    // Format parameters for display
+                    const paramsFormatted = macroInfo.parameters ? macroInfo.parameters.join(', ') : '';
+                    let hoverContent = `macro ${macroName}(${paramsFormatted})`;
+                    
+                    // Add source information if available
+                    if (macroInfo.sourceFile) {
+                        const fileName = path.basename(macroInfo.sourceFile);
+                        hoverContent += `\n\nDefined in: ${fileName}`;
+                    }
+                    
+                    return new vscode.Hover(hoverContent);
+                }
+                
+				return new vscode.Hover(`Call to macro '${macroName}'`);
+			}
+			
+			// Check for macro definitions
+			if (line.trim().startsWith('macro') && line.includes(word)) {
+				const macroDefMatch = line.match(/macro\s+([A-Za-z_][A-Za-z0-9_]*)/);
+				if (macroDefMatch && macroDefMatch[1] === word) {
+					return new vscode.Hover(`Macro definition for '${word}'`);
+				}
 			}
 			
 			// Return hover info if available
@@ -731,7 +761,7 @@ function activate(context) {
 function updateDiagnostics(document, collection) {
 	const diagnostics = [];
 	const text = document.getText();
-	const lines = text.split('\\n');
+	const lines = text.split(/\r?\n/); // CORRECTED line splitting
 
 	const symbolTable = {
 		classes: [], // { name: string, line: number, members: { functions: [], variables: [] } }
@@ -746,13 +776,14 @@ function updateDiagnostics(document, collection) {
 	let currentClassDefForMembers = null; // To link members to the current class in symbolTable
 
 	// Regular expressions for parsing (within updateDiagnostics)
-	const classRegexDiag = /class\\s+([A-Za-z_][A-Za-z0-9_]*)/;
-	const funcRegexDiag = /def\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)\\s*->\\s*([A-Za-z_][A-Za-z0-9_]*(\\[\\])?)/;
-	const macroRegexDiag = /macro\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(([^)]*)\\)/;
-	const varRegexDiag = /var\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*(\\[\\])?)/;
-	const paramRegexDiag = /([A-Za-z_][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*(\\[\\])?)/g; // For params: name type
-	const includeRegexDiag = /include\\s+([A-Za-z_][A-Za-z0-9_.]*(@[A-Za-z_][A-Za-z0-9_]*)?)/; // Kept for parseIncludeStatement call
-	const ifRegexDiag = /if\\s*\\(([^)]*)\\)/; // Regex to detect if statements
+	const classRegexDiag = /class\s+([A-Za-z_][A-Za-z0-9_]*)/; // This will be addressed in the next step
+	const funcRegexDiag = /(public\s+|private\s+)?def\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*->\s*([A-Za-z_][A-Za-z0-9_]*(\[\])?)/; // CORRECTED regex
+	const macroRegexDiag = /macro\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)/;
+	const varRegexDiag = /(public\s+|private\s+)?var\s+([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*(\[\])?)/; // CORRECTED regex
+	const paramRegexDiag = /([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*(\[\])?)/g;
+	const includeRegexDiag = /include\s+([A-Za-z_][A-Za-z0-9_.]*(@[A-Za-z_][A-Za-z0-9_]*)?)/; // Kept for parseIncludeStatement call
+	const ifRegexDiag = /if\s*\(([^)]*)\)/; // Regex to detect if statements
+	const externalCallRegexDiag = /\(\s*("[^"]*")\s+use\s*\.\s*([A-Za-z_][A-Za-z0-9_]*)\s*\(([^)]*)\)\s*\)/; // Regex for ("lib" use.func(args))
 
 	// Helper function to parse include statements
 	function parseIncludeStatement(line, lineNumber, documentDir) {
@@ -761,103 +792,249 @@ function updateDiagnostics(document, collection) {
 
 		const fullPath = match[1];
 		const parts = fullPath.split('.');
-		let alias = parts[parts.length - 1];
-		let type = 'file'; // Default type
 		let resolvedFilePath = null;
+		let remainingPathParts = [];
+		let alias = '';
+		let type = 'file'; // Default type
 
-		// Determine the base path for the .pgy file
-		// e.g., include mylibrary.utils.MyClass -> potential file is mylibrary/utils.pgy or mylibrary.pgy
-		// e.g., include mylibrary -> potential file is mylibrary.pgy
-		let baseModulePath = parts[0];
-		let possiblePaths = [];
-		
-		// Generate all possible module paths to check
-		// For include veclib.vectors.vec.Vector3D, we'll check:
-		// 1. veclib.pgy
-		// 2. veclib/vectors.pgy
-		// 3. veclib/vectors/vec.pgy
-		
-		// First try: base module (e.g., veclib.pgy)
-		possiblePaths.push({
-			path: parts[0] + '.pgy',
-			remainingPath: parts.slice(1).join('.')
-		});
-		
-		// For multi-part paths, try progressive nesting
-		if (parts.length > 1) {
-			for (let i = 1; i < parts.length; i++) {
-				// Skip the last part if it starts with uppercase (likely a class name)
-				if (i === parts.length - 1 && /^[A-Z]/.test(parts[i])) {
-					break;
-				}
-				
-				const modulePath = parts.slice(0, i + 1).join(path.sep) + '.pgy';
-				const remainingPath = parts.slice(i + 1).join('.');
-				possiblePaths.push({
-					path: modulePath,
-					remainingPath: remainingPath
-				});
-			}
-		}
-		
-		// Try to resolve the file from all possible paths
-		for (const possiblePath of possiblePaths) {
-			// Try in current directory
-			let potentialPath = path.resolve(documentDir, possiblePath.path);
-			if (fs.existsSync(potentialPath)) {
-				resolvedFilePath = potentialPath;
-				// If we found the file and there's a remaining path, it's likely a class or inner class
-				if (possiblePath.remainingPath) {
-					const lastPart = possiblePath.remainingPath.split('.').pop();
-					if (lastPart && /^[A-Z]/.test(lastPart)) {
-						alias = lastPart;
-						type = 'class';
-					}
-				}
-				break;
-			}
+		// Iterate from the longest possible file path to the shortest
+		for (let i = parts.length; i > 0; i--) {
+			const potentialModuleFileParts = parts.slice(0, i);
+			remainingPathParts = parts.slice(i);
 			
-			// Try in ~/.pangylibs/
-			const pangyLibsDir = path.join(os.homedir(), '.pangylibs');
-			potentialPath = path.resolve(pangyLibsDir, possiblePath.path);
+			let baseName = potentialModuleFileParts.join(path.sep) + '.pgy';
+			
+			// Check in current document's directory
+			let potentialPath = path.resolve(documentDir, baseName);
 			if (fs.existsSync(potentialPath)) {
 				resolvedFilePath = potentialPath;
-				// Same check for remaining path
-				if (possiblePath.remainingPath) {
-					const lastPart = possiblePath.remainingPath.split('.').pop();
-					if (lastPart && /^[A-Z]/.test(lastPart)) {
-						alias = lastPart;
-						type = 'class';
-					}
-				}
 				break;
+			}
+
+			// Check in ~/.pangylibs/
+			const pangyLibsDir = path.join(os.homedir(), '.pangylibs');
+			potentialPath = path.resolve(pangyLibsDir, baseName);
+			if (fs.existsSync(potentialPath)) {
+				resolvedFilePath = potentialPath;
+				break;
+			}
+
+			// If only one part, and it didn't resolve as "part.pgy", it's not a valid file path.
+			if (i === 1 && potentialModuleFileParts.length === 1) {
+				// Allow single name includes like "mylib" to resolve to "mylib.pgy"
+				// This was already handled by baseName construction. If it's not found, it's not found.
 			}
 		}
 
-		if (!resolvedFilePath) {
-			// Create a more helpful error message
-			const paths = possiblePaths.map(p => p.path).join(', ');
+		if (!resolvedFilePath && parts.length > 0) {
+			// Last attempt: check for a single file like "part1.pgy" if the include was "part1.ClassName"
+			// This is primarily for the case where the first segment is the filename.
+			const singleFileName = parts[0] + '.pgy';
+			remainingPathParts = parts.slice(1);
+
+			let potentialPath = path.resolve(documentDir, singleFileName);
+			if (fs.existsSync(potentialPath)) {
+				resolvedFilePath = potentialPath;
+			} else {
+				const pangyLibsDir = path.join(os.homedir(), '.pangylibs');
+				potentialPath = path.resolve(pangyLibsDir, singleFileName);
+				if (fs.existsSync(potentialPath)) {
+					resolvedFilePath = potentialPath;
+				}
+			}
+		}
+
+		if (resolvedFilePath) {
+			if (remainingPathParts.length > 0) {
+				alias = remainingPathParts[remainingPathParts.length - 1]; // The last part is the alias
+				if (alias.startsWith('@')) {
+					type = 'macro';
+					alias = alias.substring(1);
+				} else if (/^[A-Z]/.test(alias)) {
+					// If the part before the current alias was also uppercase, it's an inner class.
+					if (remainingPathParts.length > 1 && /^[A-Z]/.test(remainingPathParts[remainingPathParts.length - 2])) {
+						type = 'inner_class';
+					} else {
+						type = 'class';
+					}
+				} else {
+					// It's something else specified from a file, could be a function or variable.
+					// For simplicity, we might not have a specific type, or treat as 'file' to load all.
+					// Or, default to 'file' and let the symbol parsing find it.
+					// For now, if it's not macro or class, but has remaining parts, it's an error or needs specific handling.
+					// For robust symbol resolution, we'd rely on parsing the resolved file.
+					// However, the alias is clear.
+					type = 'file'; // Fallback to importing the whole file if specific symbol type is unclear.
+				}
+			} else {
+				// No remaining parts, means the entire include path resolved to a file.
+				// The alias is the name of the file without .pgy
+				alias = path.basename(resolvedFilePath, '.pgy');
+				type = 'file';
+			}
+		} else {
+			// Could not resolve the include path to any file
 			diagnostics.push({
-				message: `Could not resolve include path '${fullPath}'. Tried: ${paths}`,
+				message: `Could not resolve include path '${fullPath}'. Check paths and ~/.pangylibs/ configuration.`,
 				range: new vscode.Range(lineNumber, line.indexOf(fullPath), lineNumber, line.indexOf(fullPath) + fullPath.length),
 				severity: vscode.DiagnosticSeverity.Error
 			});
+			return null; // Return null if no file could be resolved.
 		}
 
-		if (alias.startsWith('@')) {
-			type = 'macro';
-			alias = alias.substring(1); // Remove @ for alias
-		} else if (/^[A-Z]/.test(alias)) {
-            // Check if the part before the supposed class/inner class is also uppercase (indicating class.InnerClass)
-            if (parts.length > 1 && /^[A-Z]/.test(parts[parts.length - 2])) {
-                type = 'inner_class';
-            } else {
-                type = 'class';
-            }
-        }
-        // else type remains 'file'
-
 		return { path: fullPath, alias, line: lineNumber, type, resolvedFilePath };
+	}
+
+	// Helper function to remove comments from a line
+	function removeComments(line) {
+		let uncommentedLine = '';
+		let inString = false;
+		let stringChar = null; // To support both ' and "
+		let isEscaped = false;
+		// This function does NOT know about multi-line block comment state from caller.
+		// It processes block comments found *on this line*.
+		let inBlockCommentOnLine = false; 
+	
+		for (let i = 0; i < line.length; i++) {
+			const char = line[i];
+			const nextChar = (i + 1 < line.length) ? line[i+1] : null;
+	
+			if (isEscaped) {
+				uncommentedLine += char;
+				isEscaped = false;
+				continue;
+			}
+	
+			if (char === '\\') {
+				uncommentedLine += char;
+				isEscaped = true;
+				continue;
+			}
+	
+			if (inString) {
+				uncommentedLine += char;
+				if (char === stringChar) {
+					inString = false;
+					stringChar = null;
+				}
+				continue;
+			}
+	
+			if (char === '"' || char === "'") { // Support single and double quotes
+				uncommentedLine += char;
+				inString = true;
+				stringChar = char;
+				continue;
+			}
+	
+			// Handle block comments /* */ found on this line
+			if (char === '/' && nextChar === '*') {
+				inBlockCommentOnLine = true;
+				i++; // Skip '*'
+				continue; // Don't add '/*' to uncommentedLine
+			}
+			if (inBlockCommentOnLine && char === '*' && nextChar === '/') {
+				inBlockCommentOnLine = false;
+				i++; // Skip '/'
+				continue; // Don't add '*/' to uncommentedLine
+			}
+	
+			if (inBlockCommentOnLine) {
+				continue; // Skip characters inside a block comment segment on this line
+			}
+	
+			// Handle single line comments // and #
+			if ((char === '/' && nextChar === '/') || char === '#') {
+				// Rest of the line is a comment
+				break;
+			}
+	
+			uncommentedLine += char;
+		}
+		return uncommentedLine;
+	}
+
+	// Helper function to check if a character is within a comment (single-line or block)
+	// This function determines if 'targetIndex' on 'line' is part of comment syntax or a string.
+	// It assumes the caller handles the global multi-line block comment state.
+	function isCharInComment(line, targetIndex) {
+		let inString = false;
+		let stringChar = null; // To support both ' and "
+		let isEscaped = false;
+		let inBlockCommentSegmentOnLine = false; // Tracks block comment started and potentially ended on this line segment
+	
+		for (let i = 0; i < line.length; i++) {
+			const char = line[i];
+			const nextChar = (i + 1 < line.length) ? line[i+1] : null;
+	
+			// Process character by character up to targetIndex or end of line.
+
+			if (isEscaped) {
+				isEscaped = false;
+				if (i === targetIndex) return false; // Escaped char (e.g., in string) is code, not comment
+				continue;
+			}
+	
+			if (char === '\\') {
+				isEscaped = true;
+				if (i === targetIndex) return false; // Backslash itself is code
+				continue;
+			}
+	
+			// String parsing
+			if (inString) {
+				if (char === stringChar) {
+					inString = false;
+					stringChar = null;
+				}
+				if (i === targetIndex) return false; // Char at targetIndex is inside or is closing quote of a string
+				continue;
+			}
+			// Check for start of string AFTER escape and existing string state is handled
+			if (char === '"' || char === "'") {
+				inString = true;
+				stringChar = char;
+				if (i === targetIndex) return false; // Char at targetIndex is an opening quote
+				continue;
+			}
+	
+			// At this point, char is not part of a string and not an escape sequence character.
+			
+			// Block comment parsing (for segments starting on this line)
+			if (char === '/' && nextChar === '*') {
+				inBlockCommentSegmentOnLine = true;
+				if (i === targetIndex || (i + 1) === targetIndex) return true; // targetIndex is on /*
+				i++; // Consume '*' as part of the '/*'
+				continue;
+			}
+			if (inBlockCommentSegmentOnLine && char === '*' && nextChar === '/') {
+				// End of a block comment segment on this line
+				if (i === targetIndex || (i + 1) === targetIndex) return true; // targetIndex is on */
+				inBlockCommentSegmentOnLine = false;
+				i++; // Consume '/' as part of the '*/'
+				continue;
+			}
+			if (inBlockCommentSegmentOnLine) {
+				if (i === targetIndex) return true; // targetIndex is inside a block comment segment started on this line
+				continue;
+			}
+	
+			// Single-line comment parsing
+			if ((char === '/' && nextChar === '/') || char === '#') {
+				if (targetIndex >= i) return true; // targetIndex is at or after start of single-line comment
+				// If comment starts after targetIndex, then targetIndex isn't in *this* comment.
+				// And since it's a single-line comment, nothing after it on this line matters for targetIndex.
+				return false; 
+			}
+	
+			// If we've processed the character at targetIndex and none of the above returned true,
+			// then char at targetIndex is not part of any comment syntax starting up to this point.
+			if (i === targetIndex) return false;
+		}
+		
+		// If targetIndex was not reached or beyond line length, default to not in comment for safety.
+		// The loop structure ensures if targetIndex is part of a comment initiated on this line, it's caught.
+		return false; 
 	}
 
 	// First pass: Populate symbol table
@@ -925,7 +1102,7 @@ function updateDiagnostics(document, collection) {
 		if (includeInfo) {
 			symbolTable.includes.push(includeInfo);
 			// If file exists, try to parse it for specific symbols if requested
-			if (includeInfo.resolvedFilePath && (includeInfo.type === 'class' || includeInfo.type === 'inner_class' || includeInfo.type === 'macro')) {
+			if (includeInfo.resolvedFilePath && (includeInfo.type === 'class' || includeInfo.type === 'inner_class' || includeInfo.type === 'macro' || includeInfo.type === 'file')) {
 				try {
 					const fileContent = fs.readFileSync(includeInfo.resolvedFilePath, 'utf8');
 					const targetSyms = {};
@@ -937,52 +1114,96 @@ function updateDiagnostics(document, collection) {
 					}
 					if (includeInfo.type === 'macro') targetSyms.macroName = includeInfo.alias;
 
-					const parsedSymbols = parsePangyFileRecursive(fileContent, includeInfo.resolvedFilePath, documentDir, targetSyms, new Set());
+					// When type is 'file', targetSyms is empty, so parsePangyFileRecursive returns all symbols.
+					const parsedSymbols = parsePangyFileRecursive(fileContent, includeInfo.resolvedFilePath, documentDir, targetSyms, new Set([document.uri.fsPath]));
 
-					let found = false;
-					if (includeInfo.type === 'class' && parsedSymbols.classes.some(c => c.name === includeInfo.alias)) {
-						found = true;
-						symbolTable.importedSymbols.classes.push({ name: includeInfo.alias, sourceFile: includeInfo.resolvedFilePath });
-						
-						// Also add functions from the class for hover information
+					let foundSpecificSymbol = false; // Used for class/macro specific imports
+
+					if (includeInfo.type === 'class') {
 						const importedClass = parsedSymbols.classes.find(c => c.name === includeInfo.alias);
-						if (importedClass && importedClass.members && importedClass.members.functions) {
-							importedClass.members.functions.forEach(func => {
+						if (importedClass) {
+							foundSpecificSymbol = true;
+							symbolTable.importedSymbols.classes.push({ name: includeInfo.alias, sourceFile: includeInfo.resolvedFilePath });
+							
+							// Also add functions from the class for hover information and completion
+							if (importedClass.members && importedClass.members.functions) {
+								importedClass.members.functions.forEach(func => {
+									symbolTable.importedSymbols.functions.push({
+										name: func.name,
+										parameters: func.parameters,
+										returnType: func.returnType,
+										sourceFile: includeInfo.resolvedFilePath,
+										className: includeInfo.alias
+									});
+								});
+							}
+						}
+					} else if (includeInfo.type === 'inner_class') {
+						const parentClassName = targetSyms.className;
+						const innerClassName = targetSyms.innerClassName;
+						const parentClass = parsedSymbols.classes.find(c => c.name === parentClassName);
+						if (parentClass && parentClass.members && parentClass.members.classes && parentClass.members.classes.some(ic => ic.name === innerClassName)) {
+							foundSpecificSymbol = true; 
+							symbolTable.importedSymbols.classes.push({ name: innerClassName, sourceFile: includeInfo.resolvedFilePath, isInner: true, parentClass: parentClassName });
+						}
+					} else if (includeInfo.type === 'macro') {
+						const importedMacro = parsedSymbols.macros.find(m => m.name === includeInfo.alias);
+						if (importedMacro) {
+							foundSpecificSymbol = true;
+							symbolTable.importedSymbols.macros.push({ name: includeInfo.alias, sourceFile: includeInfo.resolvedFilePath, parameters: importedMacro.parameters });
+						}
+					} else if (includeInfo.type === 'file') {
+						foundSpecificSymbol = true; // For file type, success means file was parsed and symbols will be loaded.
+						
+						// Import ALL top-level classes from the file
+						parsedSymbols.classes.forEach(cls => {
+							if (!symbolTable.importedSymbols.classes.some(existing => existing.name === cls.name && existing.sourceFile === includeInfo.resolvedFilePath)) {
+								symbolTable.importedSymbols.classes.push({
+									name: cls.name,
+									sourceFile: includeInfo.resolvedFilePath
+								});
+								// Optionally, also import methods of these classes for completion/hover if needed
+								if (cls.members && cls.members.functions) {
+									cls.members.functions.forEach(func => {
+										if (!symbolTable.importedSymbols.functions.some(existing => existing.name === func.name && existing.className === cls.name && existing.sourceFile === includeInfo.resolvedFilePath)) {
+											symbolTable.importedSymbols.functions.push({
+												name: func.name,
+												parameters: func.parameters,
+												returnType: func.returnType,
+												sourceFile: includeInfo.resolvedFilePath,
+												className: cls.name
+											});
+										}
+									});
+								}
+							}
+						});
+
+						// Import ALL top-level functions from the file
+						parsedSymbols.functions.forEach(func => {
+							 if (!symbolTable.importedSymbols.functions.some(existing => existing.name === func.name && !existing.className && existing.sourceFile === includeInfo.resolvedFilePath)) {
 								symbolTable.importedSymbols.functions.push({
 									name: func.name,
 									parameters: func.parameters,
 									returnType: func.returnType,
-									sourceFile: includeInfo.resolvedFilePath,
-									className: includeInfo.alias
+									sourceFile: includeInfo.resolvedFilePath
 								});
-							});
-						}
-					} else if (includeInfo.type === 'inner_class') {
-						const parentClass = parsedSymbols.classes.find(c => c.name === targetSyms.className);
-						// Basic check for inner class existence needs refinement in parsePangyFileContentForSymbols
-						// For now, we assume if parent is found, and the alias matches, it's a placeholder.
-						// A proper check would look for `class InnerClassName` within the parent class scope.
-						if (parentClass) { // Simplified: Real check would be parentClass.members.classes.some(ic => ic.name === includeInfo.alias)
-							found = true; // Placeholder for actual inner class parsing
-							symbolTable.importedSymbols.classes.push({ name: includeInfo.alias, sourceFile: includeInfo.resolvedFilePath, isInner: true, parentClass: targetSyms.className });
-						}
-					} else if (includeInfo.type === 'macro' && parsedSymbols.macros.some(m => m.name === includeInfo.alias)) {
-						found = true;
-						symbolTable.importedSymbols.macros.push({ name: includeInfo.alias, sourceFile: includeInfo.resolvedFilePath, params: parsedSymbols.macros.find(m => m.name === includeInfo.alias).parameters });
-					} else if (includeInfo.type === 'file') {
-						// For file includes, import all top-level functions
-						found = true;
-						parsedSymbols.functions.forEach(func => {
-							symbolTable.importedSymbols.functions.push({
-								name: func.name,
-								parameters: func.parameters,
-								returnType: func.returnType,
-								sourceFile: includeInfo.resolvedFilePath
-							});
+							}
+						});
+
+						// Import ALL top-level macros from the file
+						parsedSymbols.macros.forEach(macro => {
+							if (!symbolTable.importedSymbols.macros.some(existing => existing.name === macro.name && existing.sourceFile === includeInfo.resolvedFilePath)) {
+								symbolTable.importedSymbols.macros.push({
+									name: macro.name,
+									parameters: macro.parameters,
+									sourceFile: includeInfo.resolvedFilePath
+								});
+							}
 						});
 					}
 
-					if (!found) {
+					if ((includeInfo.type === 'class' || includeInfo.type === 'inner_class' || includeInfo.type === 'macro') && !foundSpecificSymbol) {
 						diagnostics.push({
 							message: `${includeInfo.type.charAt(0).toUpperCase() + includeInfo.type.slice(1)} '${includeInfo.alias}' not found in '${path.basename(includeInfo.resolvedFilePath)}'. Path: ${includeInfo.path}`,
 							range: new vscode.Range(i, line.indexOf(includeInfo.path), i, line.indexOf(includeInfo.path) + includeInfo.path.length),
@@ -1009,11 +1230,11 @@ function updateDiagnostics(document, collection) {
 			currentClassScope = className; // Set current class scope
 			if (trimmedLine.includes('{')) braceDepthStack.push('class');
 
-			if (!trimmedLine.endsWith('{') && !trimmedLine.match(/class\\s+\\w+\\s*\\{.*\\}/)) { // also check for one-liner class { ... }
+			if (!trimmedLine.endsWith('{') && !trimmedLine.match(/class\s+\w+\s*\{.*\}/)) { // also check for one-liner class { ... }
 				diagnostics.push({
 					message: "Class definition should end with '{'",
-					range: new vscode.Range(i, 0, i, lines[i].length),
-					severity: vscode.DiagnosticSeverity.Error
+						range: new vscode.Range(i, 0, i, lines[i].length),
+						severity: vscode.DiagnosticSeverity.Error
 				});
 			}
 			continue; // Move to next line after processing class definition
@@ -1034,30 +1255,42 @@ function updateDiagnostics(document, collection) {
 		// Check for function definitions
 		const funcMatch = trimmedLine.match(funcRegexDiag);
 		if (funcMatch) {
-			const funcName = funcMatch[1]; // Reverted from 2 to 1
-			const paramsString = funcMatch[2]; // Reverted from 3 to 2
-			const returnType = funcMatch[3]; // Reverted from 4 to 3
+			const accessModifier = funcMatch[1]; // CORRECTED group for access modifier
+			const funcName = funcMatch[2]; // CORRECTED group for name
+			const paramsString = funcMatch[3]; // CORRECTED group for params
+			const returnType = funcMatch[4]; // CORRECTED group for return type
 			const parameters = [];
 			let paramMatch;
-			// Need a new regex to avoid issues with shared global state if using the same regex instance
-			const localParamRegexDiag = /([A-Za-z_][A-Za-z0-9_]*)\\s+([A-Za-z_][A-Za-z0-9_]*(\\[\\])?)/g;
+			const localParamRegexDiag = /([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*(\[\])?)/g;
 			while ((paramMatch = localParamRegexDiag.exec(paramsString)) !== null) {
-				parameters.push({ name: paramMatch[1], type: paramMatch[2] }); // name type
+				parameters.push({ name: paramMatch[1], type: paramMatch[2] });
 			}
-			const funcData = { 
-                name: funcName, 
-                parameters, 
-                returnType, 
-                line: i, 
-                scope: currentClassScope, 
-                accessModifier: funcMatch[1] || 'public' // This still seems incorrect, funcMatch[1] is the function name
+			const funcData = {
+                name: funcName,
+                parameters,
+                returnType,
+                line: i,
+                scope: currentClassScope,
             };
 			symbolTable.functions.push(funcData);
 			if (currentClassDefForMembers) {
 				currentClassDefForMembers.members.functions.push(funcData);
 			}
 
-			if (!trimmedLine.includes('{') && !trimmedLine.match(/def\\s+.*\\{.*\\}/)) {
+			// RE-ADDED: Check for and warn against access modifiers on functions
+			if (accessModifier) {
+				const modifierText = accessModifier.trim();
+				let modifierIndexInLine = line.indexOf(modifierText);
+				if (modifierIndexInLine === -1) modifierIndexInLine = 0; // Fallback
+
+				diagnostics.push({
+					message: `Functions are public by default and do not support '${modifierText}' access modifier.`,
+					range: new vscode.Range(i, modifierIndexInLine, i, modifierIndexInLine + modifierText.length),
+					severity: vscode.DiagnosticSeverity.Warning
+				});
+			}
+
+			if (!trimmedLine.includes('{') && !trimmedLine.match(/def\s+.*\{.*\}/)) {
 				diagnostics.push({
 					message: "Function definition should usually end with '{' or have its body on the same line.",
 					range: new vscode.Range(i, 0, i, lines[i].length),
@@ -1075,7 +1308,7 @@ function updateDiagnostics(document, collection) {
 			const parameters = paramsString.split(',').map(p => p.trim()).filter(p => p);
 			symbolTable.macros.push({ name: macroName, parameters, line: i });
 			// Basic check: macro definition should end with '{'
-			if (!trimmedLine.includes('{') && !trimmedLine.match(/macro\\s+.*\\{.*\\}/)) {
+			if (!trimmedLine.includes('{') && !trimmedLine.match(/macro\s+.*\{.*\}/)) {
 				diagnostics.push({
 					message: "Macro definition should usually end with '{' or have its body on the same line.",
 					range: new vscode.Range(i, 0, i, lines[i].length),
@@ -1088,8 +1321,9 @@ function updateDiagnostics(document, collection) {
 		// Check for variable declarations
 		const varMatch = trimmedLine.match(varRegexDiag);
 		if (varMatch) {
-			const varName = varMatch[1];
-			const varType = varMatch[2];
+			// const accessModifier = varMatch[1]; // Optional access modifier
+			const varName = varMatch[2]; // CORRECTED group for name
+			const varType = varMatch[3]; // CORRECTED group for type
 			const varData = { name: varName, type: varType, line: i, scope: currentClassScope || 'global' };
 			symbolTable.variables.push(varData);
 			if (currentClassDefForMembers) {
@@ -1110,7 +1344,7 @@ function updateDiagnostics(document, collection) {
 		// Check for if statements
 		const ifMatch = trimmedLine.match(ifRegexDiag);
 		if (ifMatch) {
-			if (!trimmedLine.includes('{') && !trimmedLine.match(/if\\s*\\([^)]*\\)\\s*\\{.*\\}/)) {
+			if (!trimmedLine.includes('{') && !trimmedLine.match(/if\s*\(([^)]*)\)\s*\{.*\}/)) {
 				diagnostics.push({
 					message: "If statement should usually end with '{' or have its body on the same line.",
 					range: new vscode.Range(i, 0, i, lines[i].length),
@@ -1307,14 +1541,22 @@ function updateDiagnostics(document, collection) {
 		const uncommentedLineContent = removeComments(lineContent);
 
 		// Regex to find all @macroName occurrences in uncommented content
-		const macroCallRegex = /@([A-Za-z_][A-Za-z0-9_]*)/g;
+		// Improved regex to match @macroName and account for potential parameters
+		const macroCallRegex = /@([A-Za-z_][A-Za-z0-9_]*)(\s*\([^)]*\))?/g;
 		let match;
 		while ((match = macroCallRegex.exec(uncommentedLineContent)) !== null) {
 			const macroName = match[1];
-			const macroExistsInCurrentFile = symbolTable.macros.some(m => m.name === macroName);
-			const macroExistsInImports = symbolTable.importedSymbols.macros.some(m => m.name === macroName);
+			const hasParams = match[2] !== undefined; // Check if parameters were provided
+			
+			// Directly check if the macro name exists in the collected symbols
+			const macroExists = symbolTable.macros.some(m => m.name === macroName) || symbolTable.importedSymbols.macros.some(m => m.name === macroName);
 
-			if (!macroExistsInCurrentFile && !macroExistsInImports) {
+			// Skip this macro check if we're inside a macro definition for this same macro
+			const isInsideMacroDefinition = symbolTable.macros.some(m => 
+				m.name === macroName && m.line === i
+			);
+
+			if (!macroExists && !isInsideMacroDefinition) {
 				// Calculate the true index in the original line
 				let charCount = 0;
 				let originalIndex = -1;
@@ -1341,6 +1583,42 @@ function updateDiagnostics(document, collection) {
 						severity: vscode.DiagnosticSeverity.Error
 					});
 				}
+			} 
+			// If the macro exists, we can also check if it's being called with the correct number of parameters
+			else if (macroExists && hasParams) {
+				// Find the macro definition to check parameter count
+				const macroDef = symbolTable.macros.find(m => m.name === macroName) || 
+								symbolTable.importedSymbols.macros.find(m => m.name === macroName);
+				
+				if (macroDef && macroDef.parameters) {
+					// Extract parameters from the call
+					const paramsStr = match[2].trim().substring(1, match[2].trim().length - 1); // Remove parentheses
+					const calledParams = paramsStr ? paramsStr.split(',').map(p => p.trim()).filter(p => p !== '') : [];
+					
+					// Check if parameter count matches
+					if (calledParams.length !== macroDef.parameters.length) {
+						// Calculate the position of the macro call
+						let charCount = 0;
+						let originalIndex = -1;
+						for(let k = 0; k < lineContent.length; k++) {
+							if (!isCharInComment(lineContent, k)) {
+								if (charCount === match.index) {
+									originalIndex = k;
+									break;
+								}
+								charCount++;
+							}
+						}
+
+						if (originalIndex !== -1) {
+							diagnostics.push({
+								message: `Macro '@${macroName}' called with ${calledParams.length} parameters but expects ${macroDef.parameters.length}.`,
+								range: new vscode.Range(i, originalIndex, i, originalIndex + (match[0] ? match[0].length : macroName.length + 1)),
+								severity: vscode.DiagnosticSeverity.Warning
+							});
+						}
+					}
+				}
 			}
 		}
 	}
@@ -1350,32 +1628,35 @@ function updateDiagnostics(document, collection) {
 		const line = lines[i];
 		
 		// Get the uncommented part of the line
-		const uncommentedLine = removeComments(line);
+		let sourceLineForChecks = removeComments(line);
 
 		// Skip checking for errors in string literals, comments, and declaration statements
-		if (uncommentedLine.trim().startsWith('//') || // Should already be handled, but double check
-		    uncommentedLine.trim().startsWith('#') || // Should already be handled, but double check
-			uncommentedLine.trim().startsWith('/*') || // Should already be handled, but double check
-		    uncommentedLine.trim().startsWith('var ') || 
-		    uncommentedLine.trim().startsWith('def ') || 
-		    uncommentedLine.trim().startsWith('class ') ||
-		    uncommentedLine.trim().startsWith('include ')) { // Skip include statements
+		if (sourceLineForChecks.trim().startsWith('//') || 
+		    sourceLineForChecks.trim().startsWith('#') || 
+			sourceLineForChecks.trim().startsWith('/*') || 
+		    sourceLineForChecks.trim().startsWith('var ') || 
+		    sourceLineForChecks.trim().startsWith('def ') || 
+		    sourceLineForChecks.trim().startsWith('class ') ||
+		    sourceLineForChecks.trim().startsWith('include ')) { 
 			continue;
 		}
 		
-		// Handle string literals to avoid checking words inside them
-		let processedLine = uncommentedLine;
-		const stringLiterals = uncommentedLine.match(/"[^"]*"/g) || [];
-		for (const str of stringLiterals) {
-			processedLine = processedLine.replace(str, ' '.repeat(str.length));
+		const externalCallMatchVars = externalCallRegexDiag.exec(sourceLineForChecks);
+		if (externalCallMatchVars) {
+			sourceLineForChecks = externalCallMatchVars[3]; // Arguments are in the 3rd capture group
 		}
+
+		// Handle string literals to avoid checking words inside them
+		let processedLine = sourceLineForChecks;
+		const stringLiteralRegex = /"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/g; // Handles escapes and single/double quotes
+		processedLine = processedLine.replace(stringLiteralRegex, (match) => ' '.repeat(match.length));
 		
-		const words = processedLine.split(/\s+|[.(){}[\],;=+\-*/%<>!&|^~]/);
+		const words = processedLine.split(/\s+|[.(){}\[\](),;=+\-*\/%<>!&|^~]/); // Corrected regex for split
 		
 		for (const word of words) {
 			// Skip empty words, keywords, numbers, and standard types
 			if (!word || 
-			    /^(if|else|loop|stop|return|include|class|def|var|public|private|macro|this|static|new|true|false)$/.test(word) || 
+			    /^(if|else|loop|stop|return|include|class|def|var|public|private|macro|this|static|new|true|false|use)$/.test(word) || 
 			    /^[0-9]+$/.test(word) || 
 			    DEFAULT_TYPES.includes(word) ||
 			    word.length < 2) {
@@ -1388,11 +1669,16 @@ function updateDiagnostics(document, collection) {
 								   symbolTable.importedSymbols.classes.some(c => c.name === word);
 				
 				// Skip method calls (e.g., Test.new())
-				const isMethodCall = uncommentedLine.includes('.' + word);
+				const isMethodCall = processedLine.includes('.' + word);
 				
-				if (!classExists && !DEFAULT_TYPES.includes(word) && !isMethodCall) {
+				// Skip if we're inside a class definition for this same class
+				const isInsideClassDefinition = symbolTable.classes.some(c => 
+					c.name === word && c.line === i
+				);
+				
+				if (!classExists && !DEFAULT_TYPES.includes(word) && !isMethodCall && !isInsideClassDefinition) {
 					// Position detection (more accurate than just using the word index) in the uncommented line
-					const wordIndexInUncommented = uncommentedLine.indexOf(word);
+					const wordIndexInUncommented = processedLine.indexOf(word);
 					if (wordIndexInUncommented !== -1) {
 						// Calculate the true index in the original line
 						let charCount = 0;
@@ -1432,7 +1718,7 @@ function updateDiagnostics(document, collection) {
 				const isParameter = symbolTable.functions.some(f => 
 					f.parameters.some(p => p.name === word)
 				);
-				const isMethodCall = uncommentedLine.includes('.' + word) || processedLine.includes(word + '(');
+				const isMethodCall = processedLine.includes('.' + word) || processedLine.includes(word + '(');
 				const variableExists = symbolTable.variables.some(v => v.name === word);
 				
 				if (!variableExists && !isParameter && !isMethodCall && 
@@ -1441,7 +1727,7 @@ function updateDiagnostics(document, collection) {
 				     'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'exec'].includes(word)) { // Added 'exec'
 					
 					// Position detection for the variable in the uncommented line
-					const wordIndexInUncommented = uncommentedLine.indexOf(word);
+					const wordIndexInUncommented = processedLine.indexOf(word);
 					if (wordIndexInUncommented !== -1) {
 						// Calculate the true index in the original line
 						let charCount = 0;
@@ -1480,43 +1766,70 @@ function updateDiagnostics(document, collection) {
 		const line = lines[i];
 		
 		// Get the uncommented part of the line
-		const uncommentedLine = removeComments(line);
+		let sourceLineForFuncChecks = removeComments(line);
 
-		// Skip string literals to avoid checking function calls inside them
-		let processedLine = uncommentedLine;
-		const stringLiterals = uncommentedLine.match(/"[^"]*"/g) || [];
-		for (const str of stringLiterals) {
-			processedLine = processedLine.replace(str, ' '.repeat(str.length));
+		const externalCallMatchFuncs = externalCallRegexDiag.exec(sourceLineForFuncChecks);
+		let isExternalCallContext = false;
+		if (externalCallMatchFuncs) {
+			sourceLineForFuncChecks = externalCallMatchFuncs[3]; // Arguments are in the 3rd capture group
+			isExternalCallContext = true;
 		}
 		
-		let match;
-		const functionCallRegex = /([A-Za-z_][A-Za-z0-9_]*)\\s*\\(/g;
+		// Skip string literals to avoid checking function calls inside them
+		let processedLineForFuncCalls = sourceLineForFuncChecks;
+		const stringLiteralRegexFunc = /"(\\.|[^"\\])*"|'(\\.|[^'\\])*'/g; // Handles escapes and single/double quotes
+		processedLineForFuncCalls = processedLineForFuncCalls.replace(stringLiteralRegexFunc, (match) => ' '.repeat(match.length));
 		
-		while ((match = functionCallRegex.exec(processedLine)) !== null) {
+		let match;
+		const functionCallRegex = /([A-Za-z_][A-Za-z0-9_]*)\s*\(/g; // Corrected regex for function calls
+		
+		while ((match = functionCallRegex.exec(processedLineForFuncCalls)) !== null) {
 			const functionName = match[1];
-			
-			// Skip if the match is part of a definition or a method call
-			if (uncommentedLine.trim().startsWith('def') || 
-			    uncommentedLine.trim().startsWith('class') || 
-			    uncommentedLine.trim().startsWith('macro') ||
-			    // Add keywords that are followed by parentheses but are not functions
-			    ['if', 'else if', 'else', 'loop', 'static', 'var'].includes(functionName) ||
-			    // Check if it's a method call (preceded by a dot)
-			    (match.index > 0 && processedLine.substring(0, match.index).trimRight().endsWith('.')) ||
-			    // Check if it's the special 'new' constructor method
-			    functionName === 'new') {
-				continue;
+			const matchStartIndex = match.index;
+
+			// If we are in an external call's argument list, we don't apply the "is it a definition" skip
+			// because the arguments can contain normal function calls.
+			// The main external function name is already skipped because processedLineForFuncCalls is only the args.
+
+			let skipThisFunctionCheck = false;
+			if (!isExternalCallContext) { // Only apply these skips if not inside external call args
+				// Check if preceded by @ to identify macro invocation
+				let isMacroInvocation = false;
+				if (matchStartIndex > 0) {
+					const textBeforeMatch = processedLineForFuncCalls.substring(0, matchStartIndex);
+					isMacroInvocation = textBeforeMatch.endsWith('@');
+					
+					if (!isMacroInvocation) {
+						const originalBeforeMatch = removeComments(line).substring(0, removeComments(line).indexOf(functionName));
+						if (originalBeforeMatch.endsWith('@')) {
+							isMacroInvocation = true;
+						}
+					}
+				}
+				if (isMacroInvocation) continue;
+				
+				// Skip if the match is part of a definition or a method call
+				const originalUncommentedLine = removeComments(line); // Use original line for context
+				if (originalUncommentedLine.trim().startsWith('def') || 
+					originalUncommentedLine.trim().startsWith('class') || 
+					originalUncommentedLine.trim().startsWith('macro') ||
+					['if', 'else if', 'else', 'loop', 'static', 'var'].includes(functionName) ||
+					(match.index > 0 && processedLineForFuncCalls.substring(0, match.index).trimRight().endsWith('.')) ||
+					functionName === 'new') {
+					skipThisFunctionCheck = true;
+				}
 			}
+
+			if (skipThisFunctionCheck) continue;
 			
-			// Check if the function exists in the current file or imports
 			const functionExists = symbolTable.functions.some(f => f.name === functionName) || 
-								  symbolTable.importedSymbols.functions.some(f => f.name === functionName) ||
+								  symbolTable.importedSymbols.functions.some(f => f.name === functionName && !f.className) || // Ensure it's not a method unless context is a method call
 								  ['print', 'input', 'to_int', 'to_string', 'to_stringf', 'to_intf', 
-								   'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'exec'].includes(functionName); // Added 'exec'
+								   'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'exec'].includes(functionName); 
 			
 			if (!functionExists) {
 				// Position detection in the uncommented line
-				const funcIndexInUncommented = uncommentedLine.indexOf(functionName); // This might be inaccurate if the same name appears multiple times
+				const funcIndexInUncommented = processedLineForFuncCalls.indexOf(functionName); // This might be inaccurate if the same name appears multiple times
 				
 				let originalIndex = -1;
 				if (funcIndexInUncommented !== -1) {
@@ -1556,7 +1869,7 @@ function updateDiagnostics(document, collection) {
 				
 				if (functionDef) {
 					// Position detection in the uncommented line
-					const funcIndexInUncommented = uncommentedLine.indexOf(functionName); // This might be inaccurate if the same name appears multiple times
+					const funcIndexInUncommented = processedLineForFuncCalls.indexOf(functionName); // This might be inaccurate if the same name appears multiple times
 				
 					let originalIndex = -1;
 					if (funcIndexInUncommented !== -1) {
@@ -1621,16 +1934,16 @@ function updateDiagnostics(document, collection) {
 				const parsedSymbols = parsePangyFileRecursive(fileContent, include.resolvedFilePath, documentDir, targetSyms, visitedFilesForInclude);
 				
 				// Check if included library has errors
-				if (parsedSymbols.errors && parsedSymbols.errors.length > 0) {
-					for (const error of parsedSymbols.errors) {
-						diagnostics.push({
-							message: `Error in included library '${include.path}': ${error.message} (line ${error.line + 1} in ${path.basename(include.resolvedFilePath)})`, // +1 for 1-based line number display
-							range: new vscode.Range(include.line, 0, include.line, lines[include.line].length),
-							severity: vscode.DiagnosticSeverity.Error,
-							source: 'Pangy Library Error'
-						});
-					}
-				}
+				// if (parsedSymbols.errors && parsedSymbols.errors.length > 0) {
+				// 	for (const error of parsedSymbols.errors) {
+				// 		diagnostics.push({
+				// 			message: `Error in included library '${include.path}': ${error.message} (line ${error.line + 1} in ${path.basename(include.resolvedFilePath)})`, // +1 for 1-based line number display
+				// 			range: new vscode.Range(include.line, 0, include.line, lines[include.line].length),
+				// 			severity: vscode.DiagnosticSeverity.Error,
+				// 			source: 'Pangy Library Error'
+				// 		});
+				// 	}
+				// }
 			} catch (e) {
 				diagnostics.push({
 					message: `Error accessing or parsing included library '${include.path}': ${e.message}`,
@@ -1641,108 +1954,6 @@ function updateDiagnostics(document, collection) {
 			}
 		}
 	});
-
-	// Helper function to remove comments from a line
-	function removeComments(line) {
-		let uncommentedLine = '';
-		let inString = false;
-		let inBlock = false; // Assuming block comments don't cross lines in this simple remover
-
-		for (let i = 0; i < line.length; i++) {
-			const char = line[i];
-			const nextChar = line[i + 1];
-
-			if (char === '"') {
-				inString = !inString;
-				uncommentedLine += char;
-				continue;
-			}
-
-			if (inString) {
-				uncommentedLine += char;
-				continue;
-			}
-
-			// Handle block comments /* */
-			if (char === '/' && nextChar === '*') {
-				inBlock = true;
-				i++; // Skip next char
-				continue;
-			}
-			if (char === '*' && nextChar === '/') {
-				inBlock = false;
-				i++; // Skip next char
-				continue;
-			}
-
-			if (inBlock) {
-				continue;
-			}
-
-			// Handle single line comments // and #
-			if ((char === '/' && nextChar === '/') || char === '#') {
-				// Rest of the line is a comment
-				break;
-			}
-
-			uncommentedLine += char;
-		}
-		return uncommentedLine;
-	}
-
-	// Helper function to check if a character is within a comment (single-line or block)
-	// This requires re-parsing the comments for a specific line, could be optimized
-	function isCharInComment(line, index) {
-		let inString = false;
-		let inBlock = false; // Tracks block comment state for the current line
-
-		for (let i = 0; i < line.length; i++) {
-			const char = line[i];
-			const nextChar = line[i + 1];
-
-			if (char === '"') {
-				inString = !inString;
-			}
-
-			if (inString) {
-				if (i === index) return false; // Character is in a string, not a comment
-				continue;
-			}
-
-			// Handle block comments /* */
-			if (char === '/' && nextChar === '*') {
-				inBlock = true;
-				i++; // Skip next char
-				// Check if the index falls within this block comment start sequence
-				if (index === i -1 || index === i) return true; // Covers both '/' and '*'
-				continue;
-			}
-			if (char === '*' && nextChar === '/') {
-				// Check if the index falls within this block comment end sequence
-				if (index === i || index === i + 1) return true; // Covers both '*' and '/'
-				inBlock = false;
-				i++; // Skip next char
-				continue;
-			}
-
-			if (inBlock) {
-				if (i === index) return true; // Character is inside a block comment
-				continue;
-			}
-
-			// Handle single line comments // and #
-			if ((char === '/' && nextChar === '/') || char === '#') {
-				if (i === index || (char === '/' && nextChar === '/' && index === i + 1)) return true; // Covers both chars for // or the #
-				if (index > i) return true; // Index is after the start of a single-line comment
-				// No need to continue parsing the rest of the line after a single-line comment
-				break;
-			}
-			
-			if (i === index) return false; // Character is not in a comment or string
-		}
-		return false; // Index was not found within any comment
-	}
-
 
 	// Update the diagnostic collection
 	collection.set(document.uri, diagnostics);
@@ -1779,7 +1990,7 @@ function parsePangyFileRecursive(fileContent, currentFilePath, rootDocumentDir, 
         functions: [],
         errors: [] // Added errors array to track issues in included files
     };
-    const lines = fileContent.split('\\n');
+    const lines = fileContent.split(/\r?\n/); // CORRECTED line splitting
     let activeClassStack = []; // Stack to manage nested class scopes [{ def: classSymbol, depth: number }]
     let currentBraceDepth = 0;
 	let inBlockComment = false; // Track block comments within included files
@@ -1959,7 +2170,7 @@ function parsePangyFileRecursive(fileContent, currentFilePath, rootDocumentDir, 
 
         const classMatch = line.match(classRegexGlobal);
         if (classMatch) {
-            const className = classMatch[1];
+            const className = classMatch[1]; // ENSURED CORRECT (group 1 for name)
             const classSymbol = { 
                 name: className, 
                 line: originalLineNumber, 

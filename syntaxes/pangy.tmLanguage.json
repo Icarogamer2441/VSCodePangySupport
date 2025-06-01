@@ -2,6 +2,7 @@
     "scopeName": "source.pangy",
     "patterns": [
         { "include": "#comments" },
+        { "include": "#external_call" },
         { "include": "#keywords" },
         { "include": "#strings" },
         { "include": "#numbers" },
@@ -16,6 +17,35 @@
         { "include": "#constants" }
     ],
     "repository": {
+        "external_call": {
+            "name": "meta.external-call.pangy",
+            "begin": "\\(\\s*(\"[^\"]*\")\\s*(use)\\s*(\\.)\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(\\()",
+            "beginCaptures": {
+                "0": { "name": "meta.external-call.pangy" },
+                "1": { "name": "string.quoted.double.pangy" },
+                "2": { "name": "keyword.control.pangy" }, 
+                "3": { "name": "punctuation.accessor.dot.pangy" },
+                "4": { "name": "entity.name.function.external.pangy" },
+                "5": { "name": "punctuation.definition.parameters.begin.pangy" }
+            },
+            "end": "(\\))\\s*\\)",
+            "endCaptures": {
+                "1": { "name": "punctuation.definition.parameters.end.pangy" },
+                "2": { "name": "punctuation.definition.group.end.pangy" }
+            },
+            "patterns": [
+                { "include": "#variables" },
+                { "include": "#functions" },
+                { "include": "#strings" },
+                { "include": "#numbers" },
+                { "include": "#member_access" },
+                { "include": "#constants" },
+                {
+                    "match": ",",
+                    "name": "punctuation.separator.comma.pangy"
+                }
+            ]
+        },
         "comments": {
             "patterns": [
                 {
@@ -37,7 +67,7 @@
             "patterns": [
                 {
                     "name": "keyword.control.pangy",
-                    "match": "\\b(if|else if|else|loop|stop|return|include|class|def|static|var|public|private|macro|this|new)\\b"
+                    "match": "\\b(if|else if|else|loop|stop|return|include|class|def|static|var|public|private|macro|this|new|use)\\b"
                 },
                 {
                     "name": "storage.type.pangy",
