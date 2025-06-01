@@ -87,7 +87,8 @@ function activate(context) {
 				// Built-in functions
 				const builtins = [
 					'print', 'input', 'to_int', 'to_string', 'to_stringf', 'to_intf',
-					'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'exec'
+					'append', 'pop', 'length', 'index', 'open', 'write', 'read', 'close', 'exec',
+					'show'
 				];
 				
 				builtins.forEach(func => {
@@ -138,6 +139,9 @@ function activate(context) {
 							break;
 						case 'exec':
 							item.documentation = 'Executes a shell command. Mode 0 for async, 1 for sync.';
+							break;
+						case 'show':
+							item.documentation = 'Print to the output but without a new line at the end'
 							break;
 					}
 					items.push(item);
@@ -582,6 +586,10 @@ function activate(context) {
 					'exec': {
 						signature: 'exec(cmd: string, mode: int) -> string',
 						description: 'Executes a shell command. Mode 0 for async, 1 for sync. Returns command output if sync.'
+					},
+					'show': {
+						signature: 'show(args: any) -> void',
+						description: 'Print to the output without the new line at the end'
 					}
 				};
 				
@@ -629,7 +637,8 @@ function activate(context) {
 				'exec': 'Built-in function to execute a shell command',
                 'bool': 'Boolean data type (true/false)',
                 'true': 'Boolean literal for true',
-                'false': 'Boolean literal for false'
+                'false': 'Boolean literal for false',
+				'show': 'Built-in function to print things without new line at the end'
 			};
 			
 			// Check for array types
