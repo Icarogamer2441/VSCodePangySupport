@@ -67,7 +67,7 @@
             "patterns": [
                 {
                     "name": "keyword.control.pangy",
-                    "match": "\\b(if|else if|else|loop|stop|return|include|class|def|static|var|public|private|macro|this|new|use)\\b"
+                    "match": "\\b(if|else if|else|loop|while|stop|return|include|class|def|static|var|public|private|macro|this|new|use)\\b"
                 },
                 {
                     "name": "storage.type.pangy",

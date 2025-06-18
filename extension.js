@@ -66,7 +66,7 @@ function activate(context) {
 				
 				// Keywords
 				const keywords = [
-					'if', 'else if', 'else', 'loop', 'stop', 'return',
+					'if', 'else if', 'else', 'loop', 'while', 'stop', 'return',
 					'include', 'class', 'def', 'static', 'var', 'public', 
 					'private', 'macro', 'this', 'true', 'false'
 				];
@@ -433,15 +433,15 @@ function activate(context) {
 			
 				// Common snippets
 				const classSnippet = new vscode.CompletionItem('class definition', vscode.CompletionItemKind.Snippet);
-				classSnippet.insertText = new vscode.SnippetString('class ${1:ClassName} {\n\t$0\n}');
+				classSnippet.insertText = new vscode.SnippetString('class ${1:ClassName} {\\n\\t$0\\n}');
 				classSnippet.documentation = 'Create a new class';
 				
 				const mainSnippet = new vscode.CompletionItem('main function', vscode.CompletionItemKind.Snippet);
-				mainSnippet.insertText = new vscode.SnippetString('def main() -> void {\n\t$0\n}');
+				mainSnippet.insertText = new vscode.SnippetString('def main() -> void {\\n\\t$0\\n}');
 				mainSnippet.documentation = 'Create a main function';
 				
 				const functionSnippet = new vscode.CompletionItem('function definition', vscode.CompletionItemKind.Snippet);
-				functionSnippet.insertText = new vscode.SnippetString('def ${1:functionName}(${2:parameters}) -> ${3:returnType} {\n\t$0\n}');
+				functionSnippet.insertText = new vscode.SnippetString('def ${1:functionName}(${2:parameters}) -> ${3:returnType} {\\n\\t$0\\n}');
 				functionSnippet.documentation = 'Create a new function';
 				
 				const varSnippet = new vscode.CompletionItem('variable declaration', vscode.CompletionItemKind.Snippet);
@@ -449,18 +449,22 @@ function activate(context) {
 				varSnippet.documentation = 'Declare a new variable';
 				
 				const loopSnippet = new vscode.CompletionItem('loop', vscode.CompletionItemKind.Snippet);
-				loopSnippet.insertText = new vscode.SnippetString('loop {\n\t$0\n}');
+				loopSnippet.insertText = new vscode.SnippetString('loop {\\n\\t$0\\n}');
 				loopSnippet.documentation = 'Create a loop';
 				
-				const ifSnippet = new vscode.CompletionItem('if statement', vscode.CompletionItemKind.Snippet);
-				ifSnippet.insertText = new vscode.SnippetString('if (${1:condition}) {\n\t$0\n}');
+				const whileSnippet = new vscode.CompletionItem('while', vscode.CompletionItemKind.Snippet);
+				whileSnippet.insertText = new vscode.SnippetString('while (${1:condition}) {\\n\\t$0\\n}');
+				whileSnippet.documentation = 'Create a while loop';
+				
+				const ifSnippet = new vscode.CompletionItem('if', vscode.CompletionItemKind.Snippet);
+				ifSnippet.insertText = new vscode.SnippetString('if (${1:condition}) {\\n\\t$0\\n}');
 				ifSnippet.documentation = 'Create an if statement';
 				
 				const macroSnippet = new vscode.CompletionItem('macro definition', vscode.CompletionItemKind.Snippet);
-				macroSnippet.insertText = new vscode.SnippetString('macro ${1:macroName}(${2:parameters}) {\n\t$0\n}');
+				macroSnippet.insertText = new vscode.SnippetString('macro ${1:macroName}(${2:parameters}) {\\n\\t$0\\n}');
 				macroSnippet.documentation = 'Create a macro';
 				
-				items.push(classSnippet, mainSnippet, functionSnippet, varSnippet, loopSnippet, ifSnippet, macroSnippet);
+				items.push(classSnippet, mainSnippet, functionSnippet, varSnippet, loopSnippet, whileSnippet, ifSnippet, macroSnippet);
 				
 				return items;
 		}
@@ -620,6 +624,7 @@ function activate(context) {
 				'else if': 'Additional condition to check if previous conditions are false',
 				'else': 'Executes if all previous conditions are false',
 				'loop': 'Creates a loop that continues until explicitly stopped',
+				'while': 'Creates a loop that continues as long as a condition is true',
 				'stop': 'Exits a loop',
 				'var': 'Declares a variable',
 				'return': 'Exits a function and optionally returns a value',
@@ -1030,14 +1035,14 @@ function updateDiagnostics(document, collection) {
 				inBlockCommentSegmentOnLine = true;
 				if (i === targetIndex || (i + 1) === targetIndex) return true; // targetIndex is on /*
 				i++; // Consume '*' as part of the '/*'
-				continue;
+				continue; // Don't add '/*' to uncommentedLine
 			}
 			if (inBlockCommentSegmentOnLine && char === '*' && nextChar === '/') {
 				// End of a block comment segment on this line
 				if (i === targetIndex || (i + 1) === targetIndex) return true; // targetIndex is on */
 				inBlockCommentSegmentOnLine = false;
 				i++; // Consume '/' as part of the '*/'
-				continue;
+				continue; // Don't add '*/' to uncommentedLine
 			}
 			if (inBlockCommentSegmentOnLine) {
 				if (i === targetIndex) return true; // targetIndex is inside a block comment segment started on this line
@@ -1681,7 +1686,7 @@ function updateDiagnostics(document, collection) {
 		for (const word of words) {
 			// Skip empty words, keywords, numbers, and standard types
 			if (!word || 
-			    /^(if|else|loop|stop|return|include|class|def|var|public|private|macro|this|static|new|true|false|use)$/.test(word) || 
+			    /^(if|else|loop|while|stop|return|include|class|def|var|public|private|macro|this|static|new|true|false|use)$/.test(word) || 
 			    /^[0-9]+$/.test(word) || 
 			    DEFAULT_TYPES.includes(word) ||
 			    word.length < 2) {
@@ -1838,7 +1843,7 @@ function updateDiagnostics(document, collection) {
 				if (originalUncommentedLine.trim().startsWith('def') || 
 					originalUncommentedLine.trim().startsWith('class') || 
 					originalUncommentedLine.trim().startsWith('macro') ||
-					['if', 'else if', 'else', 'loop', 'static', 'var'].includes(functionName) ||
+					['if', 'else if', 'else', 'loop', 'while', 'static', 'var'].includes(functionName) ||
 					(match.index > 0 && processedLineForFuncCalls.substring(0, match.index).trimRight().endsWith('.')) ||
 					functionName === 'new') {
 					skipThisFunctionCheck = true;
